@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "profinetrpc",
+      "target_name": "profinetdcp",
       "cflags!": [ "-fno-exceptions" ],
       "cflags_cc!": [ "-fno-exceptions" ],
       "sources": [ "src/module.cc" ],

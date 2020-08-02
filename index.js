@@ -1,4 +1,4 @@
-const profinetrpc = require('bindings')('profinetrpc')
+const profinetrpc = require('bindings')('profinetdcp')
 
 const interfaces = profinetrpc.listInterfaces()
 
