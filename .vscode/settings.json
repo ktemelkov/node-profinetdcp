@@ -1,0 +1,4 @@
+{
+  "C_Cpp.default.includePath": ["${default}", "${env:LOCALAPPDATA}/node-gyp/Cache/12.10.0/include/node", "${workspaceFolder}/winpcap"],
+  "C_Cpp.default.defines": ["WIN32"]
+}

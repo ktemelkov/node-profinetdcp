@@ -1,0 +1,19 @@
+{
+  "name": "profinet-rpc",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bindings": "^1.5.0",
+    "node-addon-api": "^3.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^7.0.0"
+  },
+  "gypfile": true 
+}
