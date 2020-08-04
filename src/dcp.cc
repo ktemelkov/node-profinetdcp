@@ -9,9 +9,9 @@
 #define DCP_IDENTIFY_TIMEOUT_MS 5000
 
 #define PROCESS_STRING_PROP(SubOption, Key) \
-        if (pDcpBlock->bSubOption == SubOption && pDcpBlock->usDcpBlockLength > 2) { \
+        if (pDcpBlock->bSubOption == SubOption && usDcpBlockLength > 2) { \
           std::string stringProp(""); \
-          stringProp.append((char*)(pBlockData + 2), pDcpBlock->usDcpBlockLength - 2); \
+          stringProp.append((char*)(pBlockData + 2), usDcpBlockLength - 2); \
           host.Set(Key, stringProp.c_str()); \
         }
 
@@ -144,14 +144,15 @@ protected:
 
     for (std::list<const u_char*>::iterator it = responseFrames.begin(); it != responseFrames.end(); ++it) {
       u_char* frame = (u_char*)*it + 2;
-      u_short len = *((u_short*)*it);
+      u_short len = *((u_short*)(frame - 2));
 
-      size_t ethHeaderSize = IS_VLAN_TAGGED(frame) ? sizeof(ETHERNET_FRAME_HEADER) : sizeof(ETHERNET_VLAN_FRAME_HEADER);
+      size_t ethHeaderSize = IS_VLAN_TAGGED(frame) ? sizeof(ETHERNET_VLAN_FRAME_HEADER) : sizeof(ETHERNET_FRAME_HEADER);
       DCP_RESPONSE_HEADER* pDcpHeader = (DCP_RESPONSE_HEADER*)(frame + ethHeaderSize);
- 
+      u_short usDcpDataLength = ntohs(pDcpHeader->usDcpDataLength);
+
       if (pDcpHeader->bServiceType == DCP_RESPONSE_SUCCESS 
-            && pDcpHeader->usDcpDataLength > 0
-            && (len <= ethHeaderSize + sizeof(DCP_RESPONSE_HEADER) + pDcpHeader->usDcpDataLength)) {
+            && usDcpDataLength > 0
+            && (len >= ethHeaderSize + sizeof(DCP_RESPONSE_HEADER) + usDcpDataLength)) {
 
         Napi::Object host = BuildHostFromFrame(frame, pDcpHeader);
 
@@ -178,19 +179,21 @@ protected:
 
     size_t processed = 0;
     DCP_RESPONSE_BLOCK_HEADER* pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)(pDcpHeader + 1);
+    u_short usDcpBlockLength = ntohs(pDcpBlock->usDcpBlockLength);
 
-    for (size_t processed = 0; processed < pDcpHeader->usDcpDataLength; processed += sizeof(DCP_RESPONSE_BLOCK_HEADER) + pDcpBlock->usDcpBlockLength) {
-      pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)((u_char*)pDcpBlock + processed);
+    for (size_t processed = 0; processed < ntohs(pDcpHeader->usDcpDataLength); processed += (sizeof(DCP_RESPONSE_BLOCK_HEADER) + usDcpBlockLength)) {
+      pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)((u_char*)(pDcpHeader + 1) + processed);
+      usDcpBlockLength = ntohs(pDcpBlock->usDcpBlockLength);
       u_char* pBlockData = (u_char*)(pDcpBlock + 1);
 
       switch (pDcpBlock->bOption) {
       case OPTION_IP:
-        if (pDcpBlock->bSubOption == IP_SUBOPTION_MAC && pDcpBlock->usDcpBlockLength == 8) {
+        if (pDcpBlock->bSubOption == IP_SUBOPTION_MAC && usDcpBlockLength == 8) {
           for (int i = 0; i < 6; i++)
               mac.Set(i, (int)(pBlockData + 2)[i]); // +2 to skip the BlockInfo field
         }
         
-        if (pDcpBlock->bSubOption == IP_SUBOPTION_IPPARAM && pDcpBlock->usDcpBlockLength == 14) {
+        if (pDcpBlock->bSubOption == IP_SUBOPTION_IPPARAM && usDcpBlockLength == 14) {
           host.Set("DHCP", Napi::Boolean::New(Env(), *((u_short*)pBlockData) & MSK_IP_ADDRESS_RESPONSE_DHCP));
           
           char ip[128] = {0};
@@ -209,20 +212,20 @@ protected:
         PROCESS_STRING_PROP(DEVPROP_ALIAS, "Alias");
         PROCESS_STRING_PROP(DEVPROP_DEVICEVENDOR, "Vendor");
 
-        if (pDcpBlock->bSubOption == DEVPROP_DEVICEID && pDcpBlock->usDcpBlockLength == 6) {
+        if (pDcpBlock->bSubOption == DEVPROP_DEVICEID && usDcpBlockLength == 6) {
           host.Set("VendorId", Napi::Number::New(Env(), ntohs(*(u_short*)(pBlockData + 2))));
           host.Set("DeviceId", Napi::Number::New(Env(), ntohs(*(u_short*)(pBlockData + 4))));
         }
 
-        if (pDcpBlock->bSubOption == DEVPROP_DEVICEROLE && pDcpBlock->usDcpBlockLength == 4) {
+        if (pDcpBlock->bSubOption == DEVPROP_DEVICEROLE && usDcpBlockLength == 4) {
           host.Set("Role", Napi::Number::New(Env(), pBlockData[2]));
         }
 
-        if (pDcpBlock->bSubOption == DEVPROP_DEVICEOPTIONS && pDcpBlock->usDcpBlockLength > 2 && (pDcpBlock->usDcpBlockLength % 2) == 0) {
+        if (pDcpBlock->bSubOption == DEVPROP_DEVICEOPTIONS && usDcpBlockLength > 2 && (usDcpBlockLength % 2) == 0) {
           Napi::Array options = Napi::Array::New(Env());
           host.Set("SupportedOptions", options);
 
-          for (int i=0; i < (pDcpBlock->usDcpBlockLength - 2)/2; i++) {
+          for (int i=0; i < (usDcpBlockLength - 2)/2; i++) {
             Napi::Object opt = Napi::Object::New(Env());
             opt.Set("Option", Napi::Number::New(Env(), *(pBlockData + 2 + i*2)));
             opt.Set("SubOption", Napi::Number::New(Env(), *(pBlockData + 2 + i*2 + 1)));
@@ -263,7 +266,7 @@ protected:
 
     bpf_program filter = {0};
     char filterString[256] = {0};
-    snprintf(filterString, 255, IDENTIFY_RESPONSE_PCAP_FILTER_FORMAT, Xid, Xid);
+    snprintf(filterString, 255, IDENTIFY_RESPONSE_PCAP_FILTER_FORMAT, ntohl(Xid), ntohl(Xid));
 
     char errbuf[PCAP_ERRBUF_SIZE] = {0};
     pcap_t* pcapHandle = pcap_create(interfaceName.c_str(), errbuf);

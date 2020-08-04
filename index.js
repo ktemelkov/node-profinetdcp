@@ -4,7 +4,7 @@ const interfaces = profinetdcp.listInterfaces()
 
 console.log(interfaces)
 
-profinetdcp.dcpIdentify(interfaces[2]).then((hosts) => {
+profinetdcp.dcpIdentify(interfaces[1]).then((hosts) => {
   console.log(hosts)
 }).catch((err) => {
   console.log(err.message)

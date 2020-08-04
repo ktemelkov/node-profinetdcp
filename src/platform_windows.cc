@@ -1,3 +1,7 @@
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+
 #include <napi.h>
 #include <winsock2.h>
 #include <ws2ipdef.h>
@@ -32,7 +36,7 @@ static IP_ADAPTER_ADDRESSES* AllocAndGetAdaptersAddresses(const Napi::Env& env) 
             throw Napi::Error::New(env, "Memory allocation failed for IP_ADAPTER_ADDRESSES struct!");
         }
 
-        dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_DNS_INFO | GAA_FLAG_SKIP_FRIENDLY_NAME, 
+        dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_FRIENDLY_NAME, 
                                           NULL, pAddresses, &outBufLen);
 
         if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
