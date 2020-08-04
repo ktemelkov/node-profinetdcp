@@ -1,6 +1,6 @@
 {
   "name": "profinetdcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "PROFINET DCP Client for NodeJS",
   "main": "index.js",
   "repository": "https://github.com/ktemelkov/node-profinetdcp.git",
