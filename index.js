@@ -4,8 +4,8 @@ const interfaces = profinetdcp.listInterfaces()
 
 console.log(interfaces)
 
-profinetdcp.dcpIdentify(interfaces[2]).then(() => {
-  console.log("Resolved")
+profinetdcp.dcpIdentify(interfaces[2]).then((hosts) => {
+  console.log(hosts)
 }).catch((err) => {
   console.log(err.message)
 });
