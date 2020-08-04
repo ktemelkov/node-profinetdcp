@@ -2,8 +2,44 @@
 #include <pcap/pcap.h>
 #include <chrono>
 #include <thread>
+#include <list>
 #include "dcp_pdu.h"
 
+
+#define DCP_IDENTIFY_TIMEOUT_MS 5000
+
+#define PROCESS_STRING_PROP(SubOption, Key) \
+        if (pDcpBlock->bSubOption == SubOption && pDcpBlock->usDcpBlockLength > 2) { \
+          std::string stringProp(""); \
+          stringProp.append((char*)(pBlockData + 2), pDcpBlock->usDcpBlockLength - 2); \
+          host.Set(Key, stringProp.c_str()); \
+        }
+
+static const char IDENTIFY_REQUEST_FRAME[] = 
+                  "\x01\x0e\xcf\x00\x00\x00" /* Destination MAC: PN-MC_00:00:00 */ \
+                  "\x00\x00\x00\x79\xe5\xb9" /* Source MAC: to be filled below */ \
+                  "\x81\x00" /* Type: 802.1Q Virtual LAN (0x8100) */ \
+                  "\x00\x00" /* 802.1Q Virtual LAN, PRI: 0, DEI: 0, ID: 0 */ \
+                  "\x88\x92" /* Type: PROFINET (0x8892) */ \
+                  "\xfe\xfe" /* FrameID: 0xfefe (Real-Time: DCP (Dynamic Configuration Protocol) identify multicast request) */ \
+                  "\x05" /* ServiceID: Identify (5) */ \
+                  "\x00" /* ServiceType: Request (0) */ \
+                  "\x00\x00\x05\x3c" /* Xid: to be filled below */ \
+                  "\x00\xff" /* ResponseDelay: 255 */ \
+                  "\x00\x04" /* DCPDataLength: 4 */ \
+                  "\xff\xff\x00\x00" /* Block: All/All */ \
+                  "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" /* padding */ \
+                  "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" /* padding */;
+
+
+static const char IDENTIFY_RESPONSE_PCAP_FILTER_FORMAT[] = 
+                                    "(ether proto 0x8892" /* Profinet DCP frame type */ \
+                                          " and ether[14:2] == 0xfeff" /* DCP Identify Response */ \
+                                          " and ether[18:4] == 0x%X)" /* DCP Xid */ \
+                                    " or (ether proto 0x8100" /* VLAN Tagged Frame */ \
+                                          " and ether[16:2] == 0x8892" /* Profinet DCP frame type */ \
+                                          " and ether[18:2] == 0xfeff" /* DCP Identify Response */ \
+                                          " and ether[22:4] == 0x%X)" /* DCP Xid */;
 
 
 /**
@@ -25,70 +61,31 @@ public:
       hardwareAddress[i] = (uint32_t)hwAddr.Get((uint32_t)i).ToNumber();
   }
 
-  virtual ~DcpIdentifyWorker() {}
+
+  /**
+   * 
+   */
+  virtual ~DcpIdentifyWorker() {
+      Cleanup();
+  }
 
 
   /**
    *
    */
   void Execute() {
-    char frame[64] = {0};
+    const size_t requestLen = sizeof(IDENTIFY_REQUEST_FRAME) - 1; // -1 to remove the string terminating null character 
+    char frame[requestLen] = {0};
 
-    memcpy(frame, "\x01\x0e\xcf\x00\x00\x00" /* Destination MAC: PN-MC_00:00:00 */ \
-                  "\x00\x00\x00\x79\xe5\xb9" /* Source MAC: to be filled below */ \
-                  "\x81\x00" /* Type: 802.1Q Virtual LAN (0x8100) */ \
-                  "\x00\x00" /* 802.1Q Virtual LAN, PRI: 0, DEI: 0, ID: 0 */ \
-                  "\x88\x92" /* Type: PROFINET (0x8892) */ \
-                  "\xfe\xfe" /* FrameID: 0xfefe (Real-Time: DCP (Dynamic Configuration Protocol) identify multicast request) */ \
-                  "\x05" /* ServiceID: Identify (5) */ \
-                  "\x00" /* ServiceType: Request (0) */ \
-                  "\x00\x00\x05\x3c" /* Xid: to be filled below */ \
-                  "\x00\xff" /* ResponseDelay: 255 */ \
-                  "\x00\x04" /* DCPDataLength: 4 */ \
-                  "\xff\xff\x00\x00" /* Block: All/All */ \
-                  "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" /* padding */ \
-                  "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" /* padding */, 64);
-    
+    memcpy(frame, IDENTIFY_REQUEST_FRAME, requestLen);
     memcpy(frame + 6, hardwareAddress, 6); // copy source MAC
     memcpy(frame + 22, &Xid, 4); // copy Xid
 
-    char errbuf[PCAP_ERRBUF_SIZE] = {0};
+    pcap_t* pcapHandle = InitCapture();
 
-    pcap_t* pcapHandle = pcap_create(interfaceName.c_str(), errbuf);
-
-    if (pcapHandle == nullptr)
-      SetError(errbuf);
-    else if (pcap_set_promisc(pcapHandle, 1) != 0)
-      SetError("Unable to set promiscuous mode");
-    else if (pcap_set_buffer_size(pcapHandle, 65535) != 0)
-      SetError("Unable to set buffer size");
-    else if (pcap_set_timeout(pcapHandle, 1000) != 0)
-      SetError("Unable to set read timeout");
-    else if (pcap_setnonblock(pcapHandle, 1, errbuf) == -1)
-      SetError(errbuf);
-    else if (pcap_activate(pcapHandle) != 0)
-        SetError("Unable to start packet capture");
-    else {
-      bpf_program filter = {0};      
-      char filterString[256] = {0};
-
-      snprintf(filterString, 255, "(ether proto 0x8892" /* Profinet DCP frame type */ \
-                                          " and ether[14:2] == 0xfeff" /* DCP Identify Response */ \
-                                          " and ether[18:4] == 0x%X)" /* DCP Xid */ \
-                                    " or (ether proto 0x8100" /* VLAN Tagged Frame */ \
-                                          " and ether[16:2] == 0x8892" /* Profinet DCP frame type */ \
-                                          " and ether[18:2] == 0xfeff" /* DCP Identify Response */ \
-                                          " and ether[22:4] == 0x%X)" /* DCP Xid */, Xid, Xid);
-
-      if (-1 == pcap_compile(pcapHandle, &filter, filterString, 1, PCAP_NETMASK_UNKNOWN)) {
-        printf(pcap_geterr(pcapHandle));
-      } else {
-        pcap_setfilter(pcapHandle, &filter);
-        pcap_freecode(&filter);
-      }
-
-      if (pcap_sendpacket(pcapHandle, (const u_char*)frame, 64) != 0) {
-        SetError("Unable to start packet capture");
+    if (pcapHandle != nullptr) {
+      if (pcap_sendpacket(pcapHandle, (const u_char*)frame, requestLen) != 0) {
+        SetError("Unable to send DCP identify request frame");
       } else {
         auto startTime = std::chrono::system_clock::now();
 
@@ -97,14 +94,14 @@ public:
           const u_char* frame = pcap_next(pcapHandle, &hdr);
 
           if (frame != nullptr) {
-            ParseIdentifyResponseFrame(frame);
+            CacheIdentifyResponseFrame(frame, hdr.len);
           } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
           }
 
           auto elapsed = std::chrono::system_clock::now() - startTime;
 
-          if (std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() > 5000) {
+          if (std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() > DCP_IDENTIFY_TIMEOUT_MS) {
             break;
           }
         }
@@ -121,7 +118,9 @@ public:
    * so it is safe to use JS engine data again
    */
   void OnOK() {
-      deferred.Resolve(Napi::Number::New(Env(), 0));
+      deferred.Resolve(ProcessIdentifyResponses());
+
+      Cleanup();
   }
 
 
@@ -130,23 +129,191 @@ public:
    */
   void OnError(Napi::Error const &error) {
       deferred.Reject(error.Value());
+
+      Cleanup();
   }
 
   Napi::Promise GetPromise() { return deferred.Promise(); }
 
 protected:
   /**
-   *
+   * 
    */
-  void ParseIdentifyResponseFrame(const u_char* frame) {
-    DCP_RESPONSE_HEADER* pDcpHeader = (DCP_RESPONSE_HEADER*) (IS_VLAN_TAGGED(frame) ? (frame + sizeof(ETHERNET_FRAME_HEADER)) : (frame + sizeof(ETHERNET_VLAN_FRAME_HEADER)));
+  Napi::Array ProcessIdentifyResponses() {
+    Napi::Array hosts = Napi::Array::New(Env());
 
-    if (pDcpHeader->bServiceType == DCP_RESPONSE_SUCCESS) {
+    for (std::list<const u_char*>::iterator it = responseFrames.begin(); it != responseFrames.end(); ++it) {
+      u_char* frame = (u_char*)*it + 2;
+      u_short len = *((u_short*)*it);
 
+      size_t ethHeaderSize = IS_VLAN_TAGGED(frame) ? sizeof(ETHERNET_FRAME_HEADER) : sizeof(ETHERNET_VLAN_FRAME_HEADER);
+      DCP_RESPONSE_HEADER* pDcpHeader = (DCP_RESPONSE_HEADER*)(frame + ethHeaderSize);
+ 
+      if (pDcpHeader->bServiceType == DCP_RESPONSE_SUCCESS 
+            && pDcpHeader->usDcpDataLength > 0
+            && (len <= ethHeaderSize + sizeof(DCP_RESPONSE_HEADER) + pDcpHeader->usDcpDataLength)) {
+
+        Napi::Object host = BuildHostFromFrame(frame, pDcpHeader);
+
+        if (!host.IsEmpty())
+          hosts.Set(hosts.Length(), host);
+      }
     }
+
+    return hosts;
   }
 
+
+  /**
+   * 
+   */
+  Napi::Object BuildHostFromFrame(const u_char* frame, const DCP_RESPONSE_HEADER* pDcpHeader) {
+    Napi::Object host = Napi::Object::New(Env());
+    Napi::Array mac = Napi::Array::New(Env());
+
+    host.Set("MAC", mac);
+
+    for (int i = 0; i < 6; i++)
+        mac.Set(i, (int)frame[6 + i]); // +6 to get the source MAC
+
+    size_t processed = 0;
+    DCP_RESPONSE_BLOCK_HEADER* pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)(pDcpHeader + 1);
+
+    for (size_t processed = 0; processed < pDcpHeader->usDcpDataLength; processed += sizeof(DCP_RESPONSE_BLOCK_HEADER) + pDcpBlock->usDcpBlockLength) {
+      pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)((u_char*)pDcpBlock + processed);
+      u_char* pBlockData = (u_char*)(pDcpBlock + 1);
+
+      switch (pDcpBlock->bOption) {
+      case OPTION_IP:
+        if (pDcpBlock->bSubOption == IP_SUBOPTION_MAC && pDcpBlock->usDcpBlockLength == 8) {
+          for (int i = 0; i < 6; i++)
+              mac.Set(i, (int)(pBlockData + 2)[i]); // +2 to skip the BlockInfo field
+        }
+        
+        if (pDcpBlock->bSubOption == IP_SUBOPTION_IPPARAM && pDcpBlock->usDcpBlockLength == 14) {
+          host.Set("DHCP", Napi::Boolean::New(Env(), *((u_short*)pBlockData) & MSK_IP_ADDRESS_RESPONSE_DHCP));
+          
+          char ip[128] = {0};
+          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[2], pBlockData[3], pBlockData[4], pBlockData[6]);
+          host.Set("IPAddress", ip);
+
+          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[7], pBlockData[8], pBlockData[9], pBlockData[10]);
+          host.Set("Netmask", ip);
+
+          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[11], pBlockData[12], pBlockData[13], pBlockData[14]);
+          host.Set("Gateway", ip);
+        }
+        break;
+      case OPTION_DEVPROP:
+        PROCESS_STRING_PROP(DEVPROP_NAMEOFSTATION, "NameOfStation");
+        PROCESS_STRING_PROP(DEVPROP_ALIAS, "Alias");
+        PROCESS_STRING_PROP(DEVPROP_DEVICEVENDOR, "Vendor");
+
+        if (pDcpBlock->bSubOption == DEVPROP_DEVICEID && pDcpBlock->usDcpBlockLength == 6) {
+          host.Set("VendorId", Napi::Number::New(Env(), ntohs(*(u_short*)(pBlockData + 2))));
+          host.Set("DeviceId", Napi::Number::New(Env(), ntohs(*(u_short*)(pBlockData + 4))));
+        }
+
+        if (pDcpBlock->bSubOption == DEVPROP_DEVICEROLE && pDcpBlock->usDcpBlockLength == 4) {
+          host.Set("Role", Napi::Number::New(Env(), pBlockData[2]));
+        }
+
+        if (pDcpBlock->bSubOption == DEVPROP_DEVICEOPTIONS && pDcpBlock->usDcpBlockLength > 2 && (pDcpBlock->usDcpBlockLength % 2) == 0) {
+          Napi::Array options = Napi::Array::New(Env());
+          host.Set("SupportedOptions", options);
+
+          for (int i=0; i < (pDcpBlock->usDcpBlockLength - 2)/2; i++) {
+            Napi::Object opt = Napi::Object::New(Env());
+            opt.Set("Option", Napi::Number::New(Env(), *(pBlockData + 2 + i*2)));
+            opt.Set("SubOption", Napi::Number::New(Env(), *(pBlockData + 2 + i*2 + 1)));
+            options.Set(i, opt);
+          }
+        }
+        break;
+      case OPTION_DHCP:
+        break;
+      case OPTION_LLDP:
+        break;
+      default:
+        break;
+      }
+    }
+
+    return host;
+  }
+
+
+  /**
+   *
+   */
+  void CacheIdentifyResponseFrame(const u_char* frame, size_t len) {
+
+    u_char* pCachedFrame = new u_char[len + 2];
+    *((u_short*)pCachedFrame) = len;
+    memcpy(pCachedFrame + 2, frame, len);
+
+    responseFrames.push_back(pCachedFrame);
+  }
+
+
+  /**
+   * 
+   */
+  pcap_t* InitCapture() {
+
+    bpf_program filter = {0};
+    char filterString[256] = {0};
+    snprintf(filterString, 255, IDENTIFY_RESPONSE_PCAP_FILTER_FORMAT, Xid, Xid);
+
+    char errbuf[PCAP_ERRBUF_SIZE] = {0};
+    pcap_t* pcapHandle = pcap_create(interfaceName.c_str(), errbuf);
+
+    if (pcapHandle == nullptr)
+      SetError(errbuf);
+    else {
+      if (pcap_set_promisc(pcapHandle, 1) != 0)
+        SetError("Unable to set promiscuous mode");
+      else if (pcap_set_buffer_size(pcapHandle, 65535) != 0)
+        SetError("Unable to set buffer size");
+      else if (pcap_set_timeout(pcapHandle, 1000) != 0)
+        SetError("Unable to set read timeout");
+      else if (pcap_setnonblock(pcapHandle, 1, errbuf) == -1)
+        SetError(errbuf);
+      else if (pcap_activate(pcapHandle) != 0)
+        SetError("Unable to start packet capture");
+      else if (pcap_compile(pcapHandle, &filter, filterString, 1, PCAP_NETMASK_UNKNOWN) == -1)
+        SetError(pcap_geterr(pcapHandle));
+      else {
+        int res = pcap_setfilter(pcapHandle, &filter);
+        pcap_freecode(&filter);
+        
+        if (res != 0)
+          SetError("Unable to set packet capture filter");
+        else {
+          return pcapHandle;
+        }
+      }
+
+      pcap_close(pcapHandle);
+    }
+
+    return nullptr;
+  }
+
+  /**
+   * 
+   */
+  void Cleanup() {
+    for (std::list<const u_char*>::iterator it = responseFrames.begin(); it != responseFrames.end(); ++it) {
+      delete (u_char*)*it;
+    }
+
+    responseFrames.clear();
+  }
+
+
 private:
+  std::list<const u_char*> responseFrames;
   std::string interfaceName;
   uint8_t hardwareAddress[6];
   uint32_t Xid;

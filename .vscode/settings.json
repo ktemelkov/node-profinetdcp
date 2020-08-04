@@ -3,6 +3,7 @@
   "C_Cpp.default.defines": ["WIN32"],
   "lldb.libpython": "C:/Python-3.8.5-Embed/python3.dll",
   "files.associations": {
-    "chrono": "cpp"
+    "chrono": "cpp",
+    "list": "cpp"
   }
 }
