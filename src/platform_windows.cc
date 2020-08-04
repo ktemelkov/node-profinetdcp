@@ -94,6 +94,8 @@ Napi::Object PlatformInterfaces(const Napi::Env& env)
         intf.Set("friendlyName", Napi::String::New(env, (const char16_t*)pCurrAddresses->FriendlyName));
         intf.Set("description", Napi::String::New(env, (const char16_t*)pCurrAddresses->Description));
         intf.Set("hardwareAddress", mac);
+        intf.Set("status", Napi::Number::New(env, (uint32_t)pCurrAddresses->OperStatus));
+        intf.Set("isLoopback", Napi::Boolean::New(env, pCurrAddresses->IfType == IF_TYPE_SOFTWARE_LOOPBACK));
 
         for (int i = 0; i < (int)pCurrAddresses->PhysicalAddressLength; i++) 
             mac.Set(i, (int)pCurrAddresses->PhysicalAddress[i]);

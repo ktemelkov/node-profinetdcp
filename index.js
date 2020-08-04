@@ -1,27 +1,26 @@
 const profinetdcp = require('bindings')('profinetdcp')
 
-const interfaces = profinetdcp.listInterfaces()
+const interfaces = profinetdcp.listInterfaces().filter((intf) => !intf.isLoopback && intf.status == 1)
 
-console.log(interfaces)
-
-profinetdcp.dcpIdentify(interfaces[1]).then((hosts) => {
-  console.log(hosts)
-}).catch((err) => {
-  console.log(err.message)
-});
-
-/*
-for (var i=0; i < interfaces.length; i++) {
-  const interf = interfaces[i]
-  console.log(interf.name)
+if (interfaces.length > 0) {
+  console.log(`Found ${interfaces.length} network interfaces with link status "up"`)
   console.log('---------------------------------------------------------------------')
-  console.log(`description: ${interf.description}`)
-  console.log('addresses:')
+  console.log(interfaces)
+  console.log('---------------------------------------------------------------------')
+  
+  console.log('Sending DCP identify requests ...')
 
-  for (var j=0; j < interf.addresses.length; j++) {
-    console.log(interf.addresses[j])
-  }
-
-  console.log()
+  interfaces.forEach((intf) => {
+    profinetdcp.dcpIdentify(intf).then((hosts) => {
+      if (hosts.length > 0) {
+        console.log(`Hosts found on interface ${intf.name}`)
+        console.log(hosts)
+      } else {
+        console.log(`No hosts found on interface ${intf.name}`)
+      }
+    }).catch((err) => {
+      console.log(`Failed to indentify hosts on interface ${intf.name}`)
+      console.log(err.message)
+    });
+  })  
 }
-*/

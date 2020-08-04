@@ -197,13 +197,13 @@ protected:
           host.Set("DHCP", Napi::Boolean::New(Env(), *((u_short*)pBlockData) & MSK_IP_ADDRESS_RESPONSE_DHCP));
           
           char ip[128] = {0};
-          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[2], pBlockData[3], pBlockData[4], pBlockData[6]);
+          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[2], pBlockData[3], pBlockData[4], pBlockData[5]);
           host.Set("IPAddress", ip);
 
-          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[7], pBlockData[8], pBlockData[9], pBlockData[10]);
+          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[6], pBlockData[7], pBlockData[8], pBlockData[9]);
           host.Set("Netmask", ip);
 
-          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[11], pBlockData[12], pBlockData[13], pBlockData[14]);
+          snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[10], pBlockData[11], pBlockData[12], pBlockData[13]);
           host.Set("Gateway", ip);
         }
         break;

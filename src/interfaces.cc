@@ -52,6 +52,8 @@ static Napi::Value CreateInterfaceInfo(const Napi::Env& env, pcap_if_t* pif, con
       ret.Set("description", platf.Get("description"));
       ret.Set("adapterName", platf.Get("adapterName"));
       ret.Set("hardwareAddress", platf.Get("hardwareAddress"));
+      ret.Set("status", platf.Get("status"));
+      ret.Set("isLoopback", platf.Get("isLoopback"));
     }
 
     addrCount++;
