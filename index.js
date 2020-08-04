@@ -1,7 +1,16 @@
-const profinetrpc = require('bindings')('profinetdcp')
+const profinetdcp = require('bindings')('profinetdcp')
 
-const interfaces = profinetrpc.listInterfaces()
+const interfaces = profinetdcp.listInterfaces()
 
+console.log(interfaces)
+
+profinetdcp.dcpIdentify(interfaces[2]).then(() => {
+  console.log("Resolved")
+}).catch((err) => {
+  console.log(err.message)
+});
+
+/*
 for (var i=0; i < interfaces.length; i++) {
   const interf = interfaces[i]
   console.log(interf.name)
@@ -15,3 +24,4 @@ for (var i=0; i < interfaces.length; i++) {
 
   console.log()
 }
+*/
