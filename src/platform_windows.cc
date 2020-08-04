@@ -91,7 +91,6 @@ Napi::Object PlatformInterfaces(const Napi::Env& env)
         Napi::Array mac = Napi::Array::New(env);
 
         intf.Set("adapterName", pCurrAddresses->AdapterName);
-        intf.Set("friendlyName", Napi::String::New(env, (const char16_t*)pCurrAddresses->FriendlyName));
         intf.Set("description", Napi::String::New(env, (const char16_t*)pCurrAddresses->Description));
         intf.Set("hardwareAddress", mac);
         intf.Set("status", Napi::Number::New(env, (uint32_t)pCurrAddresses->OperStatus));

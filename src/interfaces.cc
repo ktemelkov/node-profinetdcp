@@ -1,7 +1,11 @@
 #include <napi.h>
 #include <pcap/pcap.h>
 #include "platform.h"
+#include "util.h"
 
+#ifdef __linux__
+  #include <arpa/inet.h>
+#endif
 
 /**
  * 
@@ -44,9 +48,9 @@ static Napi::Value CreateInterfaceInfo(const Napi::Env& env, pcap_if_t* pif, con
     }
 
     if (addrCount == 0) {
-      Napi::Object platf = platformIntf.Get(address).ToObject();
+      Napi::Object platf = (!IS_NULL_OR_UNDEFINED(platformIntf) && platformIntf.Has(address)) ? platformIntf.Get(address).ToObject() : Napi::Object::New(env);
 
-      if (platf.IsEmpty())
+      if (IS_NULL_OR_UNDEFINED(platf))
         continue;
 
       ret.Set("description", platf.Get("description"));
@@ -68,8 +72,11 @@ static Napi::Value CreateInterfaceInfo(const Napi::Env& env, pcap_if_t* pif, con
  */
 Napi::Array ListInterfaces(const Napi::CallbackInfo& info) {
   const Napi::Env env = info.Env();
-  Napi::Array ret = Napi::Array::New(env);
+  Napi::Array ret = Napi::Array::New(env);  
   Napi::Object platformIntf = PlatformInterfaces(env);
+
+  if (IS_NULL_OR_UNDEFINED(platformIntf))
+    return ret; // no interfaces found
 
   char errbuf[PCAP_ERRBUF_SIZE] = {0};
   pcap_if_t* pInterfaces = nullptr;
@@ -77,13 +84,11 @@ Napi::Array ListInterfaces(const Napi::CallbackInfo& info) {
   if (pcap_findalldevs(&pInterfaces, errbuf) == -1) {
     printf("Fetching list of interfaces failed. Error: %s\n", errbuf);
   } else {
-    uint32_t intfIdx = 0;
-
     for (pcap_if_t* pif = pInterfaces; pif != nullptr; pif = pif->next) {
       Napi::Value intfInfo = CreateInterfaceInfo(env, pif, platformIntf);
 
-      if (!intfInfo.IsNull())
-        ret.Set(intfIdx++, intfInfo);
+      if (!IS_NULL_OR_UNDEFINED(intfInfo))
+        ret.Set(ret.Length(), intfInfo);
     }
 
     pcap_freealldevs(pInterfaces);

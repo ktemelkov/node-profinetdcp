@@ -3,6 +3,11 @@
 #include <chrono>
 #include <thread>
 #include <list>
+
+#ifdef __linux__
+  #include <arpa/inet.h>
+#endif
+
 #include "dcp_pdu.h"
 
 

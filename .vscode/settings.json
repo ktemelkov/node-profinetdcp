@@ -1,5 +1,11 @@
 {
-  "C_Cpp.default.includePath": ["${default}", "${env:LOCALAPPDATA}/node-gyp/Cache/12.10.0/include/node", "${workspaceFolder}/winpcap"],
+  "C_Cpp.default.includePath": [
+    "${default}",
+    "${env:LOCALAPPDATA}/node-gyp/Cache/12.10.0/include/node",
+    "${workspaceFolder}/winpcap",
+    "~/.node-gyp/10.16.3/include/node",
+    "~/.node-gyp/12.10.0/include/node"
+  ],
   "C_Cpp.default.defines": ["WIN32"],
   "files.associations": {
     "chrono": "cpp",
