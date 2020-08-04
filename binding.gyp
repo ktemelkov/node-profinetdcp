@@ -4,6 +4,7 @@
       "target_name": "profinetdcp",
       "sources": [ "src/module.cc", "src/interfaces.cc", "src/dcp.cc" ],
       "include_dirs": [ "<!@(node -p \"require('node-addon-api').include\")" ],
+      "cflags_cc": [ "-fexceptions", "-Wno-missing-field-initializers" ],
       'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ],
       'conditions': [
         [ 

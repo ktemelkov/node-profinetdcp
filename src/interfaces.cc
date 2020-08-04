@@ -68,26 +68,26 @@ static Napi::Value CreateInterfaceInfo(const Napi::Env& env, pcap_if_t* pif, con
  */
 Napi::Array ListInterfaces(const Napi::CallbackInfo& info) {
   const Napi::Env env = info.Env();
+  Napi::Array ret = Napi::Array::New(env);
   Napi::Object platformIntf = PlatformInterfaces(env);
 
   char errbuf[PCAP_ERRBUF_SIZE] = {0};
   pcap_if_t* pInterfaces = nullptr;
 
-  if (pcap_findalldevs(&pInterfaces, errbuf) == -1)
-    throw Napi::Error::New(env, errbuf);
+  if (pcap_findalldevs(&pInterfaces, errbuf) == -1) {
+    printf("Fetching list of interfaces failed. Error: %s\n", errbuf);
+  } else {
+    uint32_t intfIdx = 0;
 
-  Napi::Array ret = Napi::Array::New(env);
-  uint32_t intfIdx = 0;
+    for (pcap_if_t* pif = pInterfaces; pif != nullptr; pif = pif->next) {
+      Napi::Value intfInfo = CreateInterfaceInfo(env, pif, platformIntf);
 
-  for (pcap_if_t* pif = pInterfaces; pif != nullptr; pif = pif->next) {
-    Napi::Value intfInfo = CreateInterfaceInfo(env, pif, platformIntf);
+      if (!intfInfo.IsNull())
+        ret.Set(intfIdx++, intfInfo);
+    }
 
-    if (!intfInfo.IsNull())
-      ret.Set(intfIdx++, intfInfo);
-  }
-
-  if (pInterfaces)
     pcap_freealldevs(pInterfaces);
+  }
 
   return ret;
 }

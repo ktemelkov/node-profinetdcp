@@ -50,7 +50,7 @@ public:
   /**
    * 
    */
-  DcpIdentifyWorker(Napi::Env &env, Napi::String intfName, Napi::Array hwAddr)
+  DcpIdentifyWorker(const Napi::Env& env, Napi::String intfName, Napi::Array hwAddr)
       : Napi::AsyncWorker(env), deferred(Napi::Promise::Deferred::New(env)) {
 
     interfaceName = intfName.Utf8Value();
@@ -177,7 +177,6 @@ protected:
     for (int i = 0; i < 6; i++)
         mac.Set(i, (int)frame[6 + i]); // +6 to get the source MAC
 
-    size_t processed = 0;
     DCP_RESPONSE_BLOCK_HEADER* pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)(pDcpHeader + 1);
     u_short usDcpBlockLength = ntohs(pDcpBlock->usDcpBlockLength);
 
@@ -327,8 +326,8 @@ private:
 /**
  *
  */
-Napi::Value DcpIdentify(Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
+Napi::Value DcpIdentify(const Napi::CallbackInfo& info) {
+  const Napi::Env env = info.Env();
   Napi::Object intf = info[0].As<Napi::Object>();
 
   DcpIdentifyWorker* worker = new DcpIdentifyWorker(env, intf.Get("name").As<Napi::String>(), intf.Get("hardwareAddress").As<Napi::Array>());
@@ -343,7 +342,7 @@ Napi::Value DcpIdentify(Napi::CallbackInfo& info) {
 /**
  *
  */
-Napi::Value DcpGet(Napi::CallbackInfo& info) {
+Napi::Value DcpGet(const Napi::CallbackInfo& info) {
   const Napi::Env env = info.Env();
   return env.Null();
 }
@@ -352,7 +351,7 @@ Napi::Value DcpGet(Napi::CallbackInfo& info) {
 /**
  *
  */
-Napi::Value DcpSet(Napi::CallbackInfo& info) {
+Napi::Value DcpSet(const Napi::CallbackInfo& info) {
   const Napi::Env env = info.Env();
   return env.Null();
 }
