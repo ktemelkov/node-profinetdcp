@@ -27,9 +27,9 @@ npm i profinetdcp
 ## Example
 
 ```javascript
-const profinetdcp = require('bindings')('profinetdcp')
+const { listInterfaces, dcpIdentify } = require('profinetdcp')
 
-const interfaces = profinetdcp.listInterfaces().filter((intf) => !intf.isLoopback && intf.status == 1)
+const interfaces = listInterfaces().filter((intf) => !intf.isLoopback && intf.status == 1)
 
 if (interfaces.length > 0) {
   console.log(`Found ${interfaces.length} network interfaces with link status "up"`)
@@ -40,7 +40,7 @@ if (interfaces.length > 0) {
   console.log('Sending DCP identify requests ...')
 
   interfaces.forEach((intf) => {
-    profinetdcp.dcpIdentify(intf).then((hosts) => {
+    dcpIdentify(intf).then((hosts) => {
       if (hosts.length > 0) {
         console.log(`Hosts found on interface ${intf.name}`)
         console.log(hosts)
@@ -50,7 +50,7 @@ if (interfaces.length > 0) {
     }).catch((err) => {
       console.log(`Failed to indentify hosts on interface ${intf.name}`)
       console.log(err.message)
-    });
+    })
   })  
 }
 ```
@@ -62,6 +62,4 @@ if (interfaces.length > 0) {
 - List of hosts is returned after the 5 sec. scan timeout. No partial progress at the moment.
 
 - Add documentation and examples
-
-- Add typings
 
