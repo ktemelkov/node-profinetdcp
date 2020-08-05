@@ -11,6 +11,14 @@
 
 #include "util.h"
 
+#ifdef __APPLE__
+  #include <ifaddrs.h>
+  #include <net/if_dl.h>
+#endif
+
+#ifdef __clang__
+  #pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#endif
 
 /**
  *
@@ -18,7 +26,7 @@
 static Napi::Value get_interface_info(int fd, const char *name, const Napi::Env& env) {
 
 	char address[INET6_ADDRSTRLEN + 1] = {0};
-	ifreq intfreq = {0};
+	ifreq intfreq = {{0}};
 	strncpy(intfreq.ifr_name, name, IFNAMSIZ-1);
 
 	if (0 != ioctl(fd, SIOCGIFADDR, &intfreq) || (intfreq.ifr_addr.sa_family != AF_INET && intfreq.ifr_addr.sa_family != AF_INET6))

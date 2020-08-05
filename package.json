@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": "https://github.com/ktemelkov/node-profinetdcp.git",
   "main": "index.js",
-  "types": "./index.d.ts",  
+  "types": "./index.d.ts",
   "scripts": {
     "test": "node test.js"
   },
@@ -17,5 +17,5 @@
   "devDependencies": {
     "node-gyp": "^7.0.0"
   },
-  "gypfile": true 
+  "gypfile": true
 }

@@ -4,8 +4,12 @@
 #include <thread>
 #include <list>
 
-#ifdef __linux__
+#if defined __linux__ || defined __APPLE__
   #include <arpa/inet.h>
+#endif
+
+#ifdef __clang__
+  #pragma clang diagnostic ignored "-Wmissing-field-initializers"
 #endif
 
 #include "dcp_pdu.h"
@@ -95,7 +99,7 @@ public:
         auto startTime = std::chrono::system_clock::now();
 
         while (1) {
-          pcap_pkthdr hdr = {0};
+          pcap_pkthdr hdr = {{0}};
           const u_char* frame = pcap_next(pcapHandle, &hdr);
 
           if (frame != nullptr) {
