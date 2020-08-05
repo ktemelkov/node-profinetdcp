@@ -280,14 +280,16 @@ protected:
     else {
       if (pcap_set_promisc(pcapHandle, 1) != 0)
         SetError("Unable to set promiscuous mode");
-      else if (pcap_set_buffer_size(pcapHandle, 65535) != 0)
+      else if (pcap_set_buffer_size(pcapHandle, 0) != 0)
         SetError("Unable to set buffer size");
+      else if (pcap_set_snaplen(pcapHandle, 1500) != 0)
+        SetError("Unable to set snaplen");
       else if (pcap_set_timeout(pcapHandle, 1000) != 0)
         SetError("Unable to set read timeout");
-      else if (pcap_setnonblock(pcapHandle, 1, errbuf) == -1)
-        SetError(errbuf);
       else if (pcap_activate(pcapHandle) < 0)
         SetError("Unable to start packet capture");
+      else if (pcap_setnonblock(pcapHandle, 1, errbuf) == -1)
+        SetError(errbuf);
       else if (pcap_compile(pcapHandle, &filter, filterString, 1, PCAP_NETMASK_UNKNOWN) == -1)
         SetError(pcap_geterr(pcapHandle));
       else {
