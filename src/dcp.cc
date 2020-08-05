@@ -111,9 +111,9 @@ public:
           }
         }
       }
-    }
 
-    pcap_close(pcapHandle);
+      pcap_close(pcapHandle);
+    }
   }
 
 
@@ -286,7 +286,7 @@ protected:
         SetError("Unable to set read timeout");
       else if (pcap_setnonblock(pcapHandle, 1, errbuf) == -1)
         SetError(errbuf);
-      else if (pcap_activate(pcapHandle) != 0)
+      else if (pcap_activate(pcapHandle) < 0)
         SetError("Unable to start packet capture");
       else if (pcap_compile(pcapHandle, &filter, filterString, 1, PCAP_NETMASK_UNKNOWN) == -1)
         SetError(pcap_geterr(pcapHandle));
@@ -295,7 +295,7 @@ protected:
         pcap_freecode(&filter);
         
         if (res != 0)
-          SetError("Unable to set packet capture filter");
+          SetError(pcap_geterr(pcapHandle));
         else {
           return pcapHandle;
         }
