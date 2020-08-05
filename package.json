@@ -1,6 +1,6 @@
 {
   "name": "profinetdcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "PROFINET DCP Client for NodeJS",
   "author": "Kalin Temelkov",
   "license": "MIT",
