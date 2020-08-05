@@ -32,13 +32,35 @@ static Napi::Value get_interface_info(int fd, const char *name, const Napi::Env&
 	ret.Set("adapterName", name);
 	ret.Set("description", name);
 
-	if (0 != ioctl(fd, SIOCGIFHWADDR, &intfreq))
-		return env.Null();
-
 	Napi::Array hwAddr = Napi::Array::New(env);
 	ret.Set("hardwareAddress", hwAddr);
 
+#ifdef __linux__
+	if (0 != ioctl(fd, SIOCGIFHWADDR, &intfreq))
+		return env.Null();
+
 	const unsigned char* mac = (unsigned char*)intfreq.ifr_hwaddr.sa_data;
+#else
+		ifaddrs* iflist = 0;
+		unsigned char mac[16] = {0};
+		bool found = false;
+
+    if (getifaddrs(&iflist) == 0) {
+        for (ifaddrs* cur = iflist; cur; cur = cur->ifa_next) {
+            if ((cur->ifa_addr->sa_family == AF_LINK) && (strcmp(cur->ifa_name, name) == 0) && cur->ifa_addr) {
+                sockaddr_dl* sdl = (sockaddr_dl*)cur->ifa_addr;
+                memcpy(mac, LLADDR(sdl), sdl->sdl_alen);
+								found = true;
+                break;
+            }
+        }
+
+        freeifaddrs(iflist);
+    }
+
+		if (!found)
+			return env.Null();
+#endif
 
 	for (int i=0; i < 6; i++)
 		hwAddr.Set((uint32_t)i, Napi::Number::New(env, mac[i]));

@@ -2,7 +2,7 @@ export interface NetworkInterface {
   name: string;
   description: string;
   adapterName: string;
-  hardwareAddress: number[6];
+  hardwareAddress: number[];
   IP?: string;
   IPv6?: string;
   status: number;
@@ -15,7 +15,7 @@ export interface DcpOption {
 }
 
 export interface DcpHost {
-  MAC: number[6];
+  MAC: number[];
   NameOfStation?: string;
   Alias?: string;
   Vendor?: string;

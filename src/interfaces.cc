@@ -3,9 +3,10 @@
 #include "platform.h"
 #include "util.h"
 
-#ifdef __linux__
+#if defined __linux__ || defined __APPLE__
   #include <arpa/inet.h>
 #endif
+
 
 /**
  * 
