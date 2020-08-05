@@ -23,7 +23,7 @@ static void init_npcap_dll_path(const Napi::Env& env)
 	SetDllDirectory = (BOOL(WINAPI *)(LPCTSTR)) GetProcAddress(GetModuleHandle("kernel32.dll"), "SetDllDirectoryA");
 
 	if (SetDllDirectory == NULL) {
-    	printf("Error in SetDllDirectory!\n");
+  	printf("Error in SetDllDirectory!\n");
 	} else {
 		len = GetSystemDirectory(sysdir_name, 480);	//	be safe
 
@@ -34,8 +34,6 @@ static void init_npcap_dll_path(const Napi::Env& env)
 				
 			if (SetDllDirectory(sysdir_name) == 0)
 				printf("Error in SetDllDirectory(\"System32\\Npcap\")\n");
-			}
-
 		}
 	}		
 #endif
