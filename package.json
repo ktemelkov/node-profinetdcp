@@ -6,8 +6,9 @@
   "license": "MIT",
   "repository": "https://github.com/ktemelkov/node-profinetdcp.git",
   "main": "index.js",
+  "types": "./index.d.ts",  
   "scripts": {
-    "test": "node index.js"
+    "test": "node test.js"
   },
   "dependencies": {
     "bindings": "^1.5.0",
