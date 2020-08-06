@@ -52,12 +52,12 @@ static const char IDENTIFY_RESPONSE_PCAP_FILTER_FORMAT[] =
 
 
 /**
- * 
+ *
  */
 class DcpIdentifyWorker : public Napi::AsyncWorker {
 public:
   /**
-   * 
+   *
    */
   DcpIdentifyWorker(const Napi::Env& env, Napi::String intfName, Napi::Array hwAddr)
       : Napi::AsyncWorker(env), deferred(Napi::Promise::Deferred::New(env)) {
@@ -72,7 +72,7 @@ public:
 
 
   /**
-   * 
+   *
    */
   virtual ~DcpIdentifyWorker() {
       Cleanup();
@@ -146,7 +146,7 @@ public:
 
 protected:
   /**
-   * 
+   *
    */
   Napi::Array ProcessIdentifyResponses() {
     Napi::Array hosts = Napi::Array::New(Env());
@@ -175,7 +175,7 @@ protected:
 
 
   /**
-   * 
+   *
    */
   Napi::Object BuildHostFromFrame(const u_char* frame, const DCP_RESPONSE_HEADER* pDcpHeader) {
     Napi::Object host = Napi::Object::New(Env());
@@ -189,7 +189,7 @@ protected:
     DCP_RESPONSE_BLOCK_HEADER* pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)(pDcpHeader + 1);
     u_short usDcpBlockLength = ntohs(pDcpBlock->usDcpBlockLength);
 
-    for (size_t processed = 0; processed < ntohs(pDcpHeader->usDcpDataLength); processed += (sizeof(DCP_RESPONSE_BLOCK_HEADER) + usDcpBlockLength)) {
+    for (size_t processed = 0; processed < (size_t)ntohs(pDcpHeader->usDcpDataLength); processed += (sizeof(DCP_RESPONSE_BLOCK_HEADER) + usDcpBlockLength + (usDcpBlockLength % 2))) {
       pDcpBlock = (DCP_RESPONSE_BLOCK_HEADER*)((u_char*)(pDcpHeader + 1) + processed);
       usDcpBlockLength = ntohs(pDcpBlock->usDcpBlockLength);
       u_char* pBlockData = (u_char*)(pDcpBlock + 1);
@@ -200,10 +200,10 @@ protected:
           for (int i = 0; i < 6; i++)
               mac.Set(i, (int)(pBlockData + 2)[i]); // +2 to skip the BlockInfo field
         }
-        
+
         if (pDcpBlock->bSubOption == IP_SUBOPTION_IPPARAM && usDcpBlockLength == 14) {
           host.Set("DHCP", Napi::Boolean::New(Env(), *((u_short*)pBlockData) & MSK_IP_ADDRESS_RESPONSE_DHCP));
-          
+
           char ip[128] = {0};
           snprintf(ip, sizeof(ip)-1, "%d.%d.%d.%d", pBlockData[2], pBlockData[3], pBlockData[4], pBlockData[5]);
           host.Set("IPAddress", ip);
@@ -268,7 +268,7 @@ protected:
 
 
   /**
-   * 
+   *
    */
   pcap_t* InitCapture() {
 
@@ -299,7 +299,7 @@ protected:
       else {
         int res = pcap_setfilter(pcapHandle, &filter);
         pcap_freecode(&filter);
-        
+
         if (res != 0)
           SetError(pcap_geterr(pcapHandle));
         else {
@@ -314,7 +314,7 @@ protected:
   }
 
   /**
-   * 
+   *
    */
   void Cleanup() {
     for (std::list<const u_char*>::iterator it = responseFrames.begin(); it != responseFrames.end(); ++it) {
