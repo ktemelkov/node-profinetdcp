@@ -18,6 +18,10 @@ Install libpcap-dev e.g.
 sudo apt-get install -y libpcap-dev
 ```
 
+### for Mac OSX
+
+Libpcap is already installed
+
 ## Installation
 
 ```bash
@@ -62,4 +66,6 @@ if (interfaces.length > 0) {
 - List of hosts is returned after the 5 sec. scan timeout. No partial progress at the moment.
 
 - Add documentation and examples
+
+- Mac OSX is not supported yet
 
