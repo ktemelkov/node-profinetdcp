@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "platform.h"
 
 #define WORKING_BUFFER_SIZE 15000
 #define MAX_TRIES 3
@@ -21,7 +22,7 @@
 /**
  * 
  */
-static IP_ADAPTER_ADDRESSES* AllocAndGetAdaptersAddresses(const Napi::Env& env) {
+static IP_ADAPTER_ADDRESSES* AllocAndGetAdaptersAddresses() {
     DWORD dwSize = 0;
     ULONG outBufLen = WORKING_BUFFER_SIZE; // Allocate a 15 KB buffer to start with
     ULONG Iterations = 0;
@@ -33,7 +34,8 @@ static IP_ADAPTER_ADDRESSES* AllocAndGetAdaptersAddresses(const Napi::Env& env) 
         pAddresses = (IP_ADAPTER_ADDRESSES*) MALLOC(outBufLen);
 
         if (pAddresses == NULL) {
-            throw Napi::Error::New(env, "Memory allocation failed for IP_ADAPTER_ADDRESSES struct!");
+            printf("Memory allocation failed for IP_ADAPTER_ADDRESSES struct!");
+            break;
         }
 
         dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_FRIENDLY_NAME, 
@@ -67,7 +69,7 @@ static IP_ADAPTER_ADDRESSES* AllocAndGetAdaptersAddresses(const Napi::Env& env) 
                 FREE(pAddresses);
             }
 
-            throw Napi::Error::New(env, "Call to GetAdaptersAddresses() failed!");
+            pAddresses = 0;
         }
     }
 
@@ -78,26 +80,19 @@ static IP_ADAPTER_ADDRESSES* AllocAndGetAdaptersAddresses(const Napi::Env& env) 
 /**
  * 
  */
-Napi::Object PlatformInterfaces(const Napi::Env& env)
+void PlatformInterfaces(PlatformInterfacesList& listOut)
 {
-    Napi::Object ret = Napi::Object::New(env);
-    PIP_ADAPTER_ADDRESSES pAddresses = AllocAndGetAdaptersAddresses(env);
+    PIP_ADAPTER_ADDRESSES pAddresses = AllocAndGetAdaptersAddresses();
 
     for (PIP_ADAPTER_ADDRESSES pCurrAddresses = pAddresses; pCurrAddresses != NULL; pCurrAddresses = pCurrAddresses->Next) {
         if (pCurrAddresses->PhysicalAddressLength == 0 || pCurrAddresses->FirstUnicastAddress == NULL)
             continue;
 
-        Napi::Object intf = Napi::Object::New(env);
-        Napi::Array mac = Napi::Array::New(env);
-
-        intf.Set("adapterName", pCurrAddresses->AdapterName);
-        intf.Set("description", Napi::String::New(env, (const char16_t*)pCurrAddresses->Description));
-        intf.Set("hardwareAddress", mac);
-        intf.Set("status", Napi::Number::New(env, (uint32_t)pCurrAddresses->OperStatus));
-        intf.Set("isLoopback", Napi::Boolean::New(env, pCurrAddresses->IfType == IF_TYPE_SOFTWARE_LOOPBACK));
-
-        for (int i = 0; i < (int)pCurrAddresses->PhysicalAddressLength; i++) 
-            mac.Set(i, (int)pCurrAddresses->PhysicalAddress[i]);
+        PlatformInterfaceInfo intf = {{0}};
+        strncpy(intf.adapterName, pCurrAddresses->AdapterName, MAX_ADAPTER_NAME_LENGTH);
+        memcpy(intf.hardwareAddress, pCurrAddresses->PhysicalAddress, pCurrAddresses->PhysicalAddressLength);
+        intf.status = pCurrAddresses->OperStatus == IfOperStatusUp ? 1 : 2;
+        intf.isLoopback = pCurrAddresses->IfType == IF_TYPE_SOFTWARE_LOOPBACK;
 
         for (PIP_ADAPTER_UNICAST_ADDRESS pUnicast = pCurrAddresses->FirstUnicastAddress; pUnicast != NULL; pUnicast = pUnicast->Next) {
             char dst_addr[INET6_ADDRSTRLEN + 1] = {0};
@@ -108,7 +103,8 @@ Napi::Object PlatformInterfaces(const Napi::Env& env)
                     ? inet_ntop(addr->sa_family, (char*) &(((struct sockaddr_in*)addr)->sin_addr), dst_addr, INET_ADDRSTRLEN)
                     : inet_ntop(addr->sa_family, (char*) &(((struct sockaddr_in6*)addr)->sin6_addr), dst_addr, INET6_ADDRSTRLEN);
 
-                ret.Set(address, intf);
+                if (listOut.find(address) == listOut.end())
+                    listOut.insert(std::pair<std::string, PlatformInterfaceInfo>(address, intf));
             }
         }
     }
@@ -116,6 +112,4 @@ Napi::Object PlatformInterfaces(const Napi::Env& env)
     if (pAddresses) {
         FREE(pAddresses);
     }
-
-    return ret;
 }

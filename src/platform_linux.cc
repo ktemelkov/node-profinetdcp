@@ -12,11 +12,35 @@
 
 #include "util.h"
 
+#ifdef __APPLE__
+  #include <net/if_dl.h>
+#endif
+
+#ifdef __clang__
+  #pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#endif
+
 
 /**
  *
  */
-int get_hardware_address(const char* name, uint8_t addr[6]) {
+int get_hardware_address(ifaddrs* iflist, const char* name, uint8_t addr[6]) {
+
+#ifdef __APPLE__
+
+  for (ifaddrs* cur = iflist; cur; cur = cur->ifa_next) {
+    if ((cur->ifa_addr->sa_family == AF_LINK) && (strcmp(cur->ifa_name, name) == 0) && cur->ifa_addr) {
+      sockaddr_dl* sdl = (sockaddr_dl*)cur->ifa_addr;
+      memcpy(addr, LLADDR(sdl), sdl->sdl_alen);
+      return 0;
+    }
+  }
+
+  return -1;
+
+#else
+	iflist;
+
 	ifreq intfreq = {{0}};
 	strncpy(intfreq.ifr_name, name, IFNAMSIZ-1);
 
@@ -33,14 +57,15 @@ int get_hardware_address(const char* name, uint8_t addr[6]) {
 
 	close(fd);
 	return ret;
+
+#endif
 }
 
 
 /**
  * 
  */
-Napi::Object PlatformInterfaces(const Napi::Env& env) {
-  Napi::Object ret = Napi::Object::New(env);
+void PlatformInterfaces(PlatformInterfacesList& listOut) {
 
   ifaddrs* iflist = 0;
   uint8_t mac[6] = {0};
@@ -48,28 +73,21 @@ Napi::Object PlatformInterfaces(const Napi::Env& env) {
 
   if (getifaddrs(&iflist) == 0) {
     for (ifaddrs* cur = iflist; cur != 0; cur = cur->ifa_next) {
-      if (cur->ifa_addr->sa_family == AF_INET || cur->ifa_addr->sa_family == AF_INET6) {      
-        if (0 == get_hardware_address(cur->ifa_name, mac)
-              && 0 == getnameinfo(cur->ifa_addr, cur->ifa_addr->sa_family == AF_INET ? sizeof(sockaddr_in) : sizeof(sockaddr_in6), address, INET6_ADDRSTRLEN, 0, 0, NI_NUMERICHOST)) {
+      if ((cur->ifa_addr->sa_family == AF_INET || cur->ifa_addr->sa_family == AF_INET6) 
+					&& 0 == get_hardware_address(iflist, cur->ifa_name, mac)
+          && 0 == getnameinfo(cur->ifa_addr, cur->ifa_addr->sa_family == AF_INET ? sizeof(sockaddr_in) : sizeof(sockaddr_in6), address, INET6_ADDRSTRLEN, 0, 0, NI_NUMERICHOST)
+					&& listOut.find(address) == listOut.end()) {
 
-          Napi::Object intf = Napi::Object::New(env);
-          intf.Set("adapterName", cur->ifa_name);
-          intf.Set("description", cur->ifa_name);
+				PlatformInterfaceInfo intf = {{0}};
+				strncpy(intf.adapterName, cur->ifa_name, MAX_ADAPTER_NAME_LENGTH);
+				memcpy(intf.hardwareAddress, mac, 6);
+				intf.status = (cur->ifa_flags & IFF_UP) ? 1 : 2;
+				intf.isLoopback = cur->ifa_flags & IFF_LOOPBACK;
 
-          Napi::Array hwAddr = Napi::Array::New(env);
-          intf.Set("hardwareAddress", hwAddr);
-
-          for (int i=0; i < 6; i++)
-            hwAddr.Set((uint32_t)i, Napi::Number::New(env, mac[i]));
-
-          intf.Set("status", Napi::Number::New(env, (uint32_t)(cur->ifa_flags & IFF_UP ? 1 : 2)));
-          intf.Set("isLoopback", Napi::Boolean::New(env, cur->ifa_flags & IFF_LOOPBACK));
-
-          ret.Set(address, intf);
-        }
+				listOut.insert(std::pair<std::string, PlatformInterfaceInfo>(address, intf));
       }
     }
-  }
 
-  return ret;
+		freeifaddrs(iflist);
+  }
 }

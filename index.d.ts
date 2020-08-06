@@ -29,7 +29,7 @@ export interface DcpHost {
   SupportedOptions: DcpOption[];
 }
 
-export function listInterfaces(): NetworkInterface[];
+export function listInterfaces(): Promise<NetworkInterface[]>;
 export function dcpIdentify(intf: NetworkInterface): Promise<DcpHost[]>;
 export function dcpGet(intf: NetworkInterface): any;
 export function dcpSet(intf: NetworkInterface): any;

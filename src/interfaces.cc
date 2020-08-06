@@ -1,100 +1,188 @@
 #include <napi.h>
 #include <pcap/pcap.h>
+#include <vector>
 #include "platform.h"
 #include "util.h"
+
 
 #if defined __linux__ || defined __APPLE__
   #include <arpa/inet.h>
 #endif
 
 
-/**
- * 
- */
-static Napi::Value AddressToString(const Napi::Env& env, sockaddr* addr) {
-
-  char dst_addr[INET6_ADDRSTRLEN + 1] = {0};
-    
-  const char* address = addr ? (addr->sa_family == AF_INET
-      ? inet_ntop(addr->sa_family, (char*) &(((struct sockaddr_in*)addr)->sin_addr), dst_addr, INET_ADDRSTRLEN)
-      : inet_ntop(addr->sa_family, (char*) &(((struct sockaddr_in6*)addr)->sin6_addr), dst_addr, INET6_ADDRSTRLEN)) : nullptr;
-  
-  return address != nullptr
-    ? Napi::String::New(env, address)
-    : env.Null();
-}
-
 
 /**
- * 
+ *
  */
-static Napi::Value CreateInterfaceInfo(const Napi::Env& env, pcap_if_t* pif, const Napi::Object& platformIntf) {
-  Napi::Object ret = Napi::Object::New(env);
-  uint32_t addrCount = 0;
+class ListInterfacesWorker : public Napi::AsyncWorker {
+  /**
+   * 
+   */
+  struct PcapInterfaceInfo {
+    char name[MAX_ADAPTER_NAME_LENGTH + 1];
+    char ip[INET6_ADDRSTRLEN + 1];
+    char ipv6[INET6_ADDRSTRLEN + 1];
 
-  ret.Set("name", pif->name);
+    PlatformInterfaceInfo platfomIntf;
+  };
 
-  for (pcap_addr_t* paddr = pif->addresses; paddr != nullptr; paddr = paddr->next) {
-    if (!paddr->addr)
-      continue;
+  typedef std::vector<PcapInterfaceInfo> PcapInterfaceList;
 
-    Napi::Value address = AddressToString(env, paddr->addr);
-
-    if (paddr->addr->sa_family == AF_INET) {
-      ret.Set("IP", address);
-    } else if (paddr->addr->sa_family == AF_INET6) {
-      ret.Set("IPv6", address);
-    } else {
-      continue;
-    }
-
-    if (addrCount == 0) {
-      Napi::Object platf = (!IS_NULL_OR_UNDEFINED(platformIntf) && platformIntf.Has(address)) ? platformIntf.Get(address).As<Napi::Object>() : env.Null().As<Napi::Object>();
-
-      if (IS_NULL_OR_UNDEFINED(platf))
-        continue;
-
-      ret.Set("description", platf.Get("description"));
-      ret.Set("adapterName", platf.Get("adapterName"));
-      ret.Set("hardwareAddress", platf.Get("hardwareAddress"));
-      ret.Set("status", platf.Get("status"));
-      ret.Set("isLoopback", platf.Get("isLoopback"));
-    }
-
-    addrCount++;
+public:
+  /**
+   *
+   */
+  ListInterfacesWorker(const Napi::Env& env)
+      : Napi::AsyncWorker(env), deferred(Napi::Promise::Deferred::New(env)) {
   }
 
-  return addrCount > 0  ? ret : env.Null();
-}
+  virtual ~ListInterfacesWorker() {}
+
+
+  /**
+   *
+   */
+  void Execute() {
+    PlatformInterfaces(platformInterfaces);
+
+    if (platformInterfaces.empty())
+      return; // no interfaces found
+
+    char errbuf[PCAP_ERRBUF_SIZE] = {0};
+    pcap_if_t* pInterfaces = nullptr;
+
+    if (pcap_findalldevs(&pInterfaces, errbuf) == -1) {
+      SetError("Fetching list of interfaces failed");
+    } else {
+      
+      for (pcap_if_t* pif = pInterfaces; pif != nullptr; pif = pif->next) {
+        AddPcapInterface(pif);
+      }
+
+      pcap_freealldevs(pInterfaces);
+    }
+  }
+
+
+  /**
+   * Executed when the async work is complete
+   * this function will be run inside the main event loop
+   * so it is safe to use JS engine data again
+   */
+  void OnOK() {
+    deferred.Resolve(ProcessInterfaceList());
+  }
+
+
+  /**
+   *
+   */
+  void OnError(Napi::Error const &error) {
+      deferred.Reject(error.Value());
+  }
+
+  Napi::Promise GetPromise() { return deferred.Promise(); }
+
+
+protected:
+  /**
+   *
+   */
+  sockaddr* FindAddr(ADDRESS_FAMILY family, pcap_if_t* pif) {
+    for (pcap_addr_t* paddr = pif->addresses; paddr != nullptr; paddr = paddr->next) {
+      if (!paddr->addr)
+        continue;
+
+      if (paddr->addr->sa_family == family)
+        return paddr->addr;
+    }
+
+    return 0;
+  }
+
+
+  /**
+   *
+   */
+  void AddPcapInterface(pcap_if_t* pif) {
+
+    PcapInterfaceInfo pcapIf = {{0}};
+    strncpy(pcapIf.name, pif->name, MAX_ADAPTER_NAME_LENGTH);
+
+    sockaddr* paddr = 0; 
+
+    if (nullptr != (paddr = FindAddr(AF_INET, pif)))
+      inet_ntop(paddr->sa_family, (char*) &(((struct sockaddr_in*)paddr)->sin_addr), pcapIf.ip, INET_ADDRSTRLEN);
+
+    if (nullptr != (paddr = FindAddr(AF_INET6, pif)))
+      inet_ntop(paddr->sa_family, (char*) &(((struct sockaddr_in6*)paddr)->sin6_addr), pcapIf.ipv6, INET6_ADDRSTRLEN);
+
+    PlatformInterfacesList::iterator it = platformInterfaces.end();
+
+    if (pcapIf.ip[0] != 0)
+      it = platformInterfaces.find(pcapIf.ip);
+    
+    if (it == platformInterfaces.end() && pcapIf.ipv6[0] != 0)
+      it = platformInterfaces.find(pcapIf.ipv6);
+
+    if (it == platformInterfaces.end())
+      return;
+
+    memcpy(&pcapIf.platfomIntf, &it->second, sizeof(PlatformInterfaceInfo));
+
+    pcapInterfaces.push_back(pcapIf);
+  }
+
+
+  /**
+   *
+   */
+  Napi::Array ProcessInterfaceList() {
+    Napi::Array ret = Napi::Array::New(Env());
+
+    for (PcapInterfaceList::iterator it = pcapInterfaces.begin(); it != pcapInterfaces.end(); ++it) {
+      Napi::Object intf = Napi::Object::New(Env());
+      Napi::Array mac = Napi::Array::New(Env());
+
+      for (int i=0; i < 6; i++) {
+        mac.Set((uint32_t)i,  Napi::Number::New(Env(), it->platfomIntf.hardwareAddress[i]));
+      }
+
+      intf.Set("hardwareAddress", mac);
+      intf.Set("name", Napi::String::New(Env(), it->name));
+      intf.Set("adapterName", it->platfomIntf.adapterName);
+      intf.Set("status", Napi::Number::New(Env(), it->platfomIntf.status));
+      intf.Set("isLoopback", Napi::Boolean::New(Env(), it->platfomIntf.isLoopback));
+
+      if (it->ip[0] != 0)
+        intf.Set("IP", Napi::String::New(Env(), it->ip));
+
+      if (it->ipv6[0] != 0)
+        intf.Set("IPv6", Napi::String::New(Env(), it->ipv6));
+
+      ret.Set(ret.Length(), intf);
+    }
+
+    return ret;
+  }
+
+private:
+  PcapInterfaceList pcapInterfaces;
+  PlatformInterfacesList platformInterfaces;
+  Napi::Promise::Deferred deferred;
+};
 
 
 /**
  *
  */
-Napi::Array ListInterfaces(const Napi::CallbackInfo& info) {
+Napi::Promise ListInterfaces(const Napi::CallbackInfo& info) {
   const Napi::Env env = info.Env();
-  Napi::Array ret = Napi::Array::New(env);  
-  Napi::Object platformIntf = PlatformInterfaces(env);
 
-  if (IS_NULL_OR_UNDEFINED(platformIntf))
-    return ret; // no interfaces found
+  ListInterfacesWorker* worker = new ListInterfacesWorker(env);
+  auto promise = worker->GetPromise();
 
-  char errbuf[PCAP_ERRBUF_SIZE] = {0};
-  pcap_if_t* pInterfaces = nullptr;
+  worker->Queue();
 
-  if (pcap_findalldevs(&pInterfaces, errbuf) == -1) {
-    printf("Fetching list of interfaces failed. Error: %s\n", errbuf);
-  } else {
-    
-    for (pcap_if_t* pif = pInterfaces; pif != nullptr; pif = pif->next) {
-      Napi::Value intfInfo = CreateInterfaceInfo(env, pif, platformIntf);
-
-      if (!IS_NULL_OR_UNDEFINED(intfInfo))
-        ret.Set(ret.Length(), intfInfo);
-    }
-
-    pcap_freealldevs(pInterfaces);
-  }
-
-  return ret;
+  return promise;
 }
