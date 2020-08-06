@@ -24,15 +24,15 @@
  */
 int get_hardware_address(ifaddrs* iflist, const char* name, uint8_t addr[6]) {
     
-    for (ifaddrs* cur = iflist; cur; cur = cur->ifa_next) {
-      if ((cur->ifa_addr->sa_family == AF_LINK) && (strcmp(cur->ifa_name, name) == 0) && cur->ifa_addr) {
-          sockaddr_dl* sdl = (sockaddr_dl*)cur->ifa_addr;
-          memcpy(addr, LLADDR(sdl), sdl->sdl_alen);
-          return 0;
-      }
+  for (ifaddrs* cur = iflist; cur; cur = cur->ifa_next) {
+    if ((cur->ifa_addr->sa_family == AF_LINK) && (strcmp(cur->ifa_name, name) == 0) && cur->ifa_addr) {
+      sockaddr_dl* sdl = (sockaddr_dl*)cur->ifa_addr;
+      memcpy(addr, LLADDR(sdl), sdl->sdl_alen);
+      return 0;
     }
+  }
 
-    return -1;
+  return -1;
 }
 
 
