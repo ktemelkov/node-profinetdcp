@@ -9,7 +9,7 @@
       "request": "launch",
       "name": "Debug",
       "program": "node",
-      "args": [ "index.js" ],
+      "args": [ "test.js" ],
       "cwd": "${workspaceFolder}"
     }
   ]
