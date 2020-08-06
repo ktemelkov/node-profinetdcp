@@ -41,7 +41,6 @@ int get_hardware_address(ifaddrs* iflist, const char* name, uint8_t addr[6]) {
   return -1;
 
 #else
-	iflist;
 
 	ifreq intfreq = {{0}};
 	strncpy(intfreq.ifr_name, name, IFNAMSIZ-1);
