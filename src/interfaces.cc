@@ -10,6 +10,10 @@
 #endif
 
 
+#ifdef __clang__
+  #pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#endif
+
 
 /**
  *
@@ -88,7 +92,7 @@ protected:
   /**
    *
    */
-  sockaddr* FindAddr(ADDRESS_FAMILY family, pcap_if_t* pif) {
+  sockaddr* FindAddr(uint16_t family, pcap_if_t* pif) {
     for (pcap_addr_t* paddr = pif->addresses; paddr != nullptr; paddr = paddr->next) {
       if (!paddr->addr)
         continue;

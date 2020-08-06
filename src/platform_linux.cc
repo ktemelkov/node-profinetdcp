@@ -11,6 +11,8 @@
 #include <ifaddrs.h>
 
 #include "util.h"
+#include "platform.h"
+
 
 #ifdef __APPLE__
   #include <net/if_dl.h>
