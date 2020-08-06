@@ -8,6 +8,12 @@
       'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ],
       'conditions': [
         [
+          'OS=="linux"', {
+            'sources': [ 'src/platform_linux.cc' ],
+            'link_settings': { 'libraries': [ '-lpcap' ] }
+          }
+        ],
+        [
           'OS=="mac"', {
             'sources': [ 'src/platform_osx.cc' ],
             'link_settings': { 'libraries': [ '-lpcap' ] }
@@ -24,9 +30,6 @@
                 { 'link_settings': { 'libraries': [ 'ws2_32.lib', 'IPHLPAPI.lib', '<(PRODUCT_DIR)/../../winpcap/Lib/wpcap.lib' ]}},
                 { 'link_settings': { 'libraries': [ 'ws2_32.lib', 'IPHLPAPI.lib', '<(PRODUCT_DIR)/../../winpcap/Lib/x64/wpcap.lib' ]}}]
               ]
-          }, {
-            'sources': [ 'src/platform_linux.cc' ],
-            'link_settings': { 'libraries': [ '-lpcap' ] }
           }
         ]
       ],
