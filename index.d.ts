@@ -1,11 +1,23 @@
+
+export enum LinkStatus {
+  Up = 1,
+  Down = 2
+}
+
+
+export enum DeviceRole {
+  IODevice = 1,
+  Controller = 2
+}
+
+
 export interface NetworkInterface {
   name: string;
-  description: string;
   adapterName: string;
   hardwareAddress: number[];
   IP?: string;
   IPv6?: string;
-  status: number;
+  status: LinkStatus;
   isLoopback: boolean;
 }
 
@@ -21,7 +33,7 @@ export interface DcpHost {
   Vendor?: string;
   VendorId?: number;
   DeviceId?: number;
-  Role?: number;
+  Role?: DeviceRole;
   DHCP?: boolean;
   IPAddress?: string;
   Netmask?: string;

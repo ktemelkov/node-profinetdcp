@@ -25,38 +25,42 @@ Libpcap is already installed
 ## Installation
 
 ```bash
-npm i profinetdcp
+npm install profinetdcp
 ```
 
 ## Example
 
 ```javascript
-const { listInterfaces, dcpIdentify } = require('profinetdcp')
+const { listInterfaces, dcpIdentify, LinkStatus } = require('profinetdcp')
 
-const interfaces = listInterfaces().filter((intf) => !intf.isLoopback && intf.status == 1)
+listInterfaces().then((list) => {
+  const interfaces = list.filter((intf) => !intf.isLoopback && intf.status == LinkStatus.Up)
 
-if (interfaces.length > 0) {
-  console.log(`Found ${interfaces.length} network interfaces with link status "up"`)
-  console.log('---------------------------------------------------------------------')
-  console.log(interfaces)
-  console.log('---------------------------------------------------------------------')
+  if (interfaces.length > 0) {
+    console.log(`Found ${interfaces.length} network interfaces with link status "up"`)
+    console.log('---------------------------------------------------------------------')
+    console.log(interfaces)
+    console.log('---------------------------------------------------------------------')
+    
+    console.log('Sending DCP identify requests ...')
   
-  console.log('Sending DCP identify requests ...')
-
-  interfaces.forEach((intf) => {
-    dcpIdentify(intf).then((hosts) => {
-      if (hosts.length > 0) {
-        console.log(`Hosts found on interface ${intf.name}`)
-        console.log(hosts)
-      } else {
-        console.log(`No hosts found on interface ${intf.name}`)
-      }
-    }).catch((err) => {
-      console.log(`Failed to indentify hosts on interface ${intf.name}`)
-      console.log(err.message)
-    })
-  })  
-}
+    interfaces.forEach((intf) => {
+      dcpIdentify(intf).then((hosts) => {
+        if (hosts.length > 0) {
+          console.log(`Hosts found on interface ${intf.name}`)
+          console.log(hosts)
+        } else {
+          console.log(`No hosts found on interface ${intf.name}`)
+        }
+      }).catch((err) => {
+        console.log(`Failed to indentify hosts on interface ${intf.name}`)
+        console.log(err.message)
+      })
+    })  
+  } else {
+    console.log(`No network interfaces found with link status "up"`)
+  }  
+})
 ```
 
 ## TODO
@@ -66,6 +70,4 @@ if (interfaces.length > 0) {
 - List of hosts is returned after the 5 sec. scan timeout. No partial progress at the moment.
 
 - Add documentation and examples
-
-- Mac OSX is not supported yet
 

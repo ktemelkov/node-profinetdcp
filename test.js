@@ -24,6 +24,8 @@ listInterfaces().then((list) => {
         console.log(`Failed to indentify hosts on interface ${intf.name}`)
         console.log(err.message)
       })
-    })  
+    })
+  } else {
+    console.log(`No network interfaces found with link status "up"`)
   }  
 })
