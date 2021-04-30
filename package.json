@@ -4,7 +4,11 @@
   "description": "PROFINET DCP Client for NodeJS",
   "author": "Kalin Temelkov",
   "license": "MIT",
-  "keywords": [ "profinet", "DCP", "profinet-dcp" ],
+  "keywords": [
+    "profinet",
+    "DCP",
+    "profinet-dcp"
+  ],
   "repository": "https://github.com/ktemelkov/node-profinetdcp.git",
   "main": "index.js",
   "types": "./index.d.ts",
