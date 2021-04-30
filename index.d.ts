@@ -94,6 +94,6 @@ export interface DcpHost {
 
 
 export function listInterfaces(): Promise<NetworkInterface[]>;
-export function dcpIdentify(intf: NetworkInterface): Promise<DcpHost[]>;
+export function dcpIdentify(intf: NetworkInterface, partialResultCallback?: (host: DcpHost) => void): Promise<DcpHost[]>;
 export function dcpGet(intf: NetworkInterface): any;
 export function dcpSet(intf: NetworkInterface): any;
