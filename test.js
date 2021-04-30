@@ -13,7 +13,10 @@ listInterfaces().then((list) => {
     console.log('Sending DCP identify requests ...')
   
     interfaces.forEach((intf) => {
-      dcpIdentify(intf).then((hosts) => {
+      dcpIdentify(intf, (host) => {
+        console.log('Host found:', host.NameOfStation)
+      })
+      .then((hosts) => {
         if (hosts.length > 0) {
           console.log(`Hosts found on interface ${intf.name}`)
           console.log(hosts)

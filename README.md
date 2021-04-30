@@ -8,7 +8,7 @@ Libpcap library should be already installed prior to the installation of the npm
 
 ### For Windows
 
-Install NPcap from https://nmap.org/npcap/#download
+Install NPcap from <https://nmap.org/npcap/#download>
 
 ### For Linux
 
@@ -70,4 +70,3 @@ listInterfaces().then((list) => {
 - List of hosts is returned after the 5 sec. scan timeout. No partial progress at the moment.
 
 - Add documentation and examples
-

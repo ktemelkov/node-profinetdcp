@@ -54,15 +54,16 @@ static const char IDENTIFY_RESPONSE_PCAP_FILTER_FORMAT[] =
 /**
  *
  */
-class DcpIdentifyWorker : public Napi::AsyncWorker {
+class DcpIdentifyWorker : public Napi::AsyncProgressQueueWorker<u_char> {
 public:
   /**
    *
    */
-  DcpIdentifyWorker(const Napi::Env& env, Napi::String intfName, Napi::Array hwAddr)
-      : Napi::AsyncWorker(env), deferred(Napi::Promise::Deferred::New(env)) {
+  DcpIdentifyWorker(const Napi::Env& env, Napi::String intfName, Napi::Array hwAddr, Napi::Function& progressCallback)
+      : Napi::AsyncProgressQueueWorker<u_char>(progressCallback), deferred(Napi::Promise::Deferred::New(env)) {
 
     interfaceName = intfName.Utf8Value();
+    hosts.Reset(Napi::Array::New(Env()), 1);
 
     Xid = htonl((uint32_t)rand());
 
@@ -75,14 +76,13 @@ public:
    *
    */
   virtual ~DcpIdentifyWorker() {
-      Cleanup();
   }
 
 
   /**
    *
    */
-  void Execute() {
+  void Execute(const ExecutionProgress& progress) {
     const size_t requestLen = sizeof(IDENTIFY_REQUEST_FRAME) - 1; // -1 to remove the string terminating null character 
     char frame[requestLen] = {0};
 
@@ -103,7 +103,7 @@ public:
           const u_char* frame = pcap_next(pcapHandle, &hdr);
 
           if (frame != nullptr) {
-            CacheIdentifyResponseFrame(frame, hdr.len);
+            progress.Send(frame, hdr.len);
           } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
           }
@@ -122,14 +122,41 @@ public:
 
 
   /**
+   *
+   */
+  void OnProgress(const u_char* frame, size_t len) {
+    Napi::HandleScope scope(Env());
+
+    size_t ethHeaderSize = IS_VLAN_TAGGED(frame) ? sizeof(ETHERNET_VLAN_FRAME_HEADER) : sizeof(ETHERNET_FRAME_HEADER);
+    DCP_RESPONSE_HEADER* pDcpHeader = (DCP_RESPONSE_HEADER*)(frame + ethHeaderSize);
+    u_short usDcpDataLength = ntohs(pDcpHeader->usDcpDataLength);
+
+    if (pDcpHeader->bServiceType == DCP_RESPONSE_SUCCESS 
+          && usDcpDataLength > 0
+          && (len >= ethHeaderSize + sizeof(DCP_RESPONSE_HEADER) + usDcpDataLength)) {
+
+      Napi::Object host = BuildHostFromFrame(frame, pDcpHeader);
+
+      if (!host.IsEmpty()) {
+        Napi::Array hostsArray = hosts.Value().As<Napi::Array>();
+
+        hostsArray.Set(hostsArray.Length(), host);
+
+        Callback().Call({ host });
+      }
+    }
+  }
+
+
+  /**
    * Executed when the async work is complete
    * this function will be run inside the main event loop
    * so it is safe to use JS engine data again
    */
   void OnOK() {
-      deferred.Resolve(ProcessIdentifyResponses());
+    Napi::HandleScope scope(Env());
 
-      Cleanup();
+    deferred.Resolve(hosts.Value());
   }
 
 
@@ -137,43 +164,14 @@ public:
    *
    */
   void OnError(Napi::Error const &error) {
-      deferred.Reject(error.Value());
+    Napi::HandleScope scope(Env());
 
-      Cleanup();
+    deferred.Reject(error.Value());
   }
 
   Napi::Promise GetPromise() { return deferred.Promise(); }
 
 protected:
-  /**
-   *
-   */
-  Napi::Array ProcessIdentifyResponses() {
-    Napi::Array hosts = Napi::Array::New(Env());
-
-    for (std::list<const u_char*>::iterator it = responseFrames.begin(); it != responseFrames.end(); ++it) {
-      u_char* frame = (u_char*)*it + 2;
-      u_short len = *((u_short*)(frame - 2));
-
-      size_t ethHeaderSize = IS_VLAN_TAGGED(frame) ? sizeof(ETHERNET_VLAN_FRAME_HEADER) : sizeof(ETHERNET_FRAME_HEADER);
-      DCP_RESPONSE_HEADER* pDcpHeader = (DCP_RESPONSE_HEADER*)(frame + ethHeaderSize);
-      u_short usDcpDataLength = ntohs(pDcpHeader->usDcpDataLength);
-
-      if (pDcpHeader->bServiceType == DCP_RESPONSE_SUCCESS 
-            && usDcpDataLength > 0
-            && (len >= ethHeaderSize + sizeof(DCP_RESPONSE_HEADER) + usDcpDataLength)) {
-
-        Napi::Object host = BuildHostFromFrame(frame, pDcpHeader);
-
-        if (!host.IsEmpty())
-          hosts.Set(hosts.Length(), host);
-      }
-    }
-
-    return hosts;
-  }
-
-
   /**
    *
    */
@@ -257,19 +255,6 @@ protected:
   /**
    *
    */
-  void CacheIdentifyResponseFrame(const u_char* frame, size_t len) {
-
-    u_char* pCachedFrame = new u_char[len + 2];
-    *((u_short*)pCachedFrame) = len;
-    memcpy(pCachedFrame + 2, frame, len);
-
-    responseFrames.push_back(pCachedFrame);
-  }
-
-
-  /**
-   *
-   */
   pcap_t* InitCapture() {
 
     bpf_program filter = {0};
@@ -313,23 +298,12 @@ protected:
     return nullptr;
   }
 
-  /**
-   *
-   */
-  void Cleanup() {
-    for (std::list<const u_char*>::iterator it = responseFrames.begin(); it != responseFrames.end(); ++it) {
-      delete (u_char*)*it;
-    }
-
-    responseFrames.clear();
-  }
-
 
 private:
-  std::list<const u_char*> responseFrames;
   std::string interfaceName;
   uint8_t hardwareAddress[6];
   uint32_t Xid;
+  Napi::ObjectReference hosts;
   Napi::Promise::Deferred deferred;
 };
 
@@ -337,11 +311,18 @@ private:
 /**
  *
  */
+void DcpIdentifyProgressCallback(const Napi::CallbackInfo& info) {
+}
+
+/**
+ *
+ */
 Napi::Value DcpIdentify(const Napi::CallbackInfo& info) {
   const Napi::Env env = info.Env();
   Napi::Object intf = info[0].As<Napi::Object>();
+  Napi::Function progressCallback = (info.Length() > 1) ? info[1].As<Napi::Function>() : Napi::Function::New<DcpIdentifyProgressCallback>(env, nullptr, nullptr);
 
-  DcpIdentifyWorker* worker = new DcpIdentifyWorker(env, intf.Get("name").As<Napi::String>(), intf.Get("hardwareAddress").As<Napi::Array>());
+  DcpIdentifyWorker* worker = new DcpIdentifyWorker(env, intf.Get("name").As<Napi::String>(), intf.Get("hardwareAddress").As<Napi::Array>(), progressCallback);
   auto promise = worker->GetPromise();
 
   worker->Queue();
